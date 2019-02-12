@@ -3,7 +3,9 @@
 import sys
 reload(sys)
 sys.setdefaultencoding('utf8')
-from flask import Flask, Response, make_response, url_for, render_template, request, session
+from flask import Flask, Response, make_response, url_for, render_template, request, session, redirect
+import requests
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 app.debug = True
@@ -90,6 +92,37 @@ def IoT_http_prepost_response():
 def template_test(iot_number=None):
 	iot_members = ["CHOI", "JOO", "CHOI2", "KANG"]
 	return render_template("template_test.html", iot_number=iot_number, iot_members=iot_members)
+
+@app.route("/iot")
+@app.route("/iot/")
+def iot():
+	result_req	 = requests.get("http://busanit.ac.kr/p/?j=41")
+	result_txt	 = result_req.text
+	result_head	 = result_req.headers
+	result_status = result_req.status_code
+	if True == result_req.ok:
+		obj_soup = BeautifulSoup(result_txt, "html.parser")
+		iot_data = obj_soup.select("table.ej-tbl>tbody>tr>td>a")
+		return render_template("main.html", iot_data = iot_data)
+	else:
+		return "Loading fail"
+
+@app.route("/gugu")
+@app.route("/gugu/")
+@app.route("/gugu/<int:iot_num>")
+def iot_gugu(iot_num=None):
+	return render_template("gugu.html", iot_num=iot_num)
+
+@app.route("/calcul", methods=["POST"])
+def calcul(iot_num=None):
+	if request.method == "POST":
+		if "" == request.form["iot_num"]:
+			cal_num = None
+		else:
+			cal_num = request.form["iot_num"]
+	else:
+		cal_num = None
+	return redirect(url_for("iot_gugu", iot_num=cal_num))
 
 if __name__ == "__main__":
 	app.run(host = "192.168.0.203")
