@@ -6,6 +6,14 @@ sys.setdefaultencoding('utf8')
 from flask import Flask, Response, make_response, url_for, render_template, request, session, redirect
 import requests
 from bs4 import BeautifulSoup
+from subprocess import PIPE, Popen 
+import psutil
+import RPi.GPIO as GPIO
+from camera import Camera
+
+LedPin = 17
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(LedPin, GPIO.OUT)
 
 app = Flask(__name__)
 app.debug = True
@@ -96,15 +104,20 @@ def template_test(iot_number=None):
 @app.route("/iot")
 @app.route("/iot/")
 def iot():
-#result_req	 = requests.get("http://busanit.ac.kr/p/?j=41")
-	result_req	 = requests.get("https://media.daum.net")
+	#result_req	 = requests.get("http://busanit.ac.kr/p/?j=41")
+	#result_req	 = requests.get("http://media.daum.net")
+	result_req	 = requests.get("http://media.daum.net/ranking/bestreply/")
+	#result_req	 = requests.get("https://sports.news.naver.com/esports/news/index.nhn?isphoto=N&rc=N")
 	result_txt	 = result_req.text
 	result_head	 = result_req.headers
 	result_status = result_req.status_code
 	if True == result_req.ok:
 		obj_soup = BeautifulSoup(result_txt, "html.parser")
-#iot_data = obj_soup.select("table.ej-tbl>tbody>tr>td>a")
-		iot_data = obj_soup.select("div.box_headline>ul.list_headline>li>strong.tit_g>a")
+		#iot_data = obj_soup.select("table.ej-tbl>tbody>tr>td>a")
+		#iot_data = obj_soup.select("div.box_headline>ul.list_headline>li>strong.tit_g>a")
+		iot_data = obj_soup.select("div.cont_thumb>strong.tit_thumb>a")
+		#iot_data = obj_soup.select("div.text>a")
+		#iot_data = obj_soup.select("")
 		return render_template("main.html", iot_data = iot_data)
 	else:
 		return "Loading fail"
@@ -125,6 +138,63 @@ def calcul(iot_num=None):
 	else:
 		cal_num = None
 	return redirect(url_for("iot_gugu", iot_num=cal_num))
+
+@app.route("/test_temp")
+def iot_test_temp():
+	iot_string = "python holy shit"
+	iot_list = [1000, 1324, 6745, 2458, 3456]
+	return render_template('template.html', my_string=iot_string, my_list=iot_list)
+
+def iot_measure_temp(): 
+	process = Popen(["vcgencmd", "measure_temp"], stdout=PIPE) 
+	output, _error = process.communicate() 
+	return float(output[output.index("=") + 1:output.rindex("'")])
+
+@app.route("/info")
+def iot_sys_info():
+#==========================================
+	cpu_temp		= iot_measure_temp()
+	cpu_percent		= psutil.cpu_percent()
+	cpu_count		= psutil.cpu_count()
+#==========================================
+	memory			= psutil.virtual_memory()
+	mem_total		= memory.total
+	mem_percent		= memory.percent
+#==========================================
+	hd_disk			= psutil.disk_usage("/")
+	disk_percent	= hd_disk.percent
+	iot_sys_info_dict = { 
+							"CPU Temperature : "		:cpu_temp,
+							"CPU Percent	 : "		:cpu_percent,
+							"CPU Count		 : "		:cpu_count,
+							"Memory Total	 : "		:mem_total,
+							"Memory Percent	 : "		:mem_percent,
+							"HD Disk Percent : "		:disk_percent
+						}
+	return render_template("hw_info.html", hw_info = iot_sys_info_dict)
+
+@app.route("/led/<iot_state>")
+def led_onoff(iot_state):
+	if "on" == iot_state:
+		GPIO.output(LedPin, GPIO.HIGH)
+	if "off" == iot_state:
+		GPIO.output(LedPin, GPIO.LOW)
+	if "toggle" == iot_state:
+		GPIO.output(LedPin, not GPIO.input(LedPin))
+	return iot_sys_info() 
+
+@app.route("/camera")
+def iot_camera():
+	return render_template("camera.html")
+
+def iot_camera_start(camera):
+	while True: 
+		frame = camera.get_frame() 
+		yield (b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n") 
+
+@app.route("/camera_run") 
+def iot_camera_run(): 
+    return Response(iot_camera_start(Camera()), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 if __name__ == "__main__":
 	app.run(host = "192.168.0.203")
